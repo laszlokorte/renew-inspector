@@ -1838,6 +1838,8 @@ currentRefMap,
 )}
 
 {#if decoration}
+				{@const decorationKind =
+										decoration[kindKey]}
 	{#if !boxDecorations[decorationKind]}
 		
 		<text
