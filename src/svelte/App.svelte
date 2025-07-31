@@ -34,13 +34,11 @@
 
 <section>
 
-	<h1>Renew Inspector</h1>
 
 	<RenewImport />
 
 
-	<ThreeDee />
-	<div style:height="60vh"></div>
+	<!-- <ThreeDee /> -->
 </section>
 
 <style>

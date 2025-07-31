@@ -66,14 +66,18 @@
 		[
 			L.rewrite((x) => {
 				try {
+					const json = parserAutoDetect(x, false, {
+							kind: kindKey,
+							kindKey: kindKey,
+							ref: refKey,
+							refKey: refKeySymbol,
+							self: selfKey,
+							selfKey: selfKeySymbol,
+						});
+
 					return {
 						string: x,
-						json: parserAutoDetect(x, false, {
-							kind: kindKey,
-							ref: refKey,
-							self: selfKey,
-						}),
-						cachedSizes: undefined,
+						json: json,
 					};
 				} catch (e) {
 					return e;
@@ -98,7 +102,7 @@
 	// 	renewDocument,
 	// );
 
-	const sizeCache = view(["cachedSizes", L.defaults({})], renewDocument);
+	const sizeCache = atom({});
 
 	const jsonLens = L.lens(
 		(x) => x.json,
@@ -107,6 +111,7 @@
 			try {
 				const ser = makeSerializer(makeGrammar(newJson.version), {
 							kind: kindKey,
+							kindKey: kindKey,
 							ref: refKey,
 							self: selfKey,
 						})
@@ -127,7 +132,6 @@
 					drawing: newJson.drawing,
 					refMap: newJson.refMap,
 				},
-				cachedSizes: undefined,
 			};
 		},
 	);
@@ -1079,300 +1083,21 @@
 	const currentRefMap = $derived(refMap.value);
 </script>
 
-
-<p>Load a renew file into the left text field.</p>
-<p>
-	It will be parsed and output as JSON on the right and rendered as SVG below.
-</p>
-
-<div style="display: flex; gap: 0.2em; align-items: baseline; flex-wrap: wrap;">
-	{#each examples as example, e (e)}
-		<button
-			type="button"
-			onclick={(e) => {
-				renewSerialized.value = example;
-				refitCamera();
-			}}>File #{e + 1}</button
-		>
-	{/each}
-	{#await moreExamples then { files }}
-		<select
-			onchange={(e) => {
-				if (e.currentTarget.value) {
-					loadExample(e.currentTarget.value).then((x) => {
-						renewSerialized.value = x.content;
-						refitCamera();
-					});
-				}
-			}}
-		>
-			<option value="">More examples</option>
-			{#each files as { name, href }}
-				<option value={href}>{name}</option>
-			{/each}
-		</select>
-	{:catch}
-		<em style="color: #aaa"
-			>Or Drop Renew Files from your own PC into the text field</em
-		>
-	{/await}
-</div>
-
-<div
+<div 
+			class={[
+				"screen",
+				"drop-target",
+				{
+					dragging: dragging.value > 0,
+				},
+			]}
 	ondragover={onDragOver}
 	ondragenter={onDragEnter}
 	ondragleave={onDragLeave}
 	ondrop={onDragDrop}
-	role="application"
->
-	<div class="beside" style="height: 15em">
-		<textarea
-			class={[
-				"drop-target",
-				{
-					"has-error": renewSerialized.hasError,
-					dragging: dragging.value > 0,
-				},
-			]}
-			placeholder="// Drop a renew file here"
-			bind:value={renewSerialized.value}
-		></textarea>
-		<textarea bind:value={renewJson.value}></textarea>
-
-		<div
-			style="display: grid; flex-direction: column; align-items: stretch; align-content: stretch;flex-grow: 1; grid-template-rows: auto 1fr;"
-		>
-			<input
-				type="search"
-				placeholder="Search..."
-				bind:value={searchTerm.value}
-				style="flex-grow: 0; height: 2em;"
-			/>
-			<select size="10" bind:value={selection.value} multiple="multiple">
-				{#each currentRefMap as ref, r (r)}
-					{#if !searchTerm.value.length || ref[kindKey].indexOf(searchTerm.value) > -1}
-						<option
-							value={r}
-							disabled={selectableTypes.indexOf(ref[kindKey]) < 0}
-							>#{r} {ref[kindKey]}</option
-						>
-					{/if}
-				{/each}
-			</select>
-		</div>
-	</div>
-
-	<div class="error-message" hidden={!renewSerialized.hasError}>
-		<button type="button" onclick={renewSerialized.reset}>Reset</button>
-		{renewSerialized.error}
-	</div>
-
-	<div class="error-message" hidden={!renewJson.hasError}>
-		<button type="button" onclick={renewJson.reset}>Reset</button>
-		{renewJson.error}
-	</div>
-
-	<label><input type="checkbox" bind:checked={debug.value} /> Debug</label>
-	<div
-		class={{ hidden: selection.value.length == 0 }}
-		style=" position: fixed; top: 1em; left: 1em;z-index: 10000; overflow: auto; color: #fff; "
-	>
-		<div
-			style="display: flex; flex-direction: column; background: #333d; gap: 1em; padding: 0.5em"
-		>
-			<button
-				type="button"
-				onclick={(e) => {
-					selection.value = [];
-				}}>Clear Selection</button
-			>
-			{#each selection.value as s}
-				{@const attrsSelected = read(
-					[s, "attributes", "attrs", L.partsOf(L.keys)],
-					refMap,
-				)}
-				{@const propsSelected = read(
-					[
-						s,
-						L.partsOf(
-							L.keys,
-							L.when((x) => x != "attributes" && x[0] !== "_"),
-						),
-					],
-					refMap,
-				)}
-				{@const selectedKind = read([s, kindKey], refMap)}
-				<fieldset>
-					<legend># {s} ({selectedKind.value})</legend>
-
-					<h4>Props</h4>
-					<dl>
-						{#each propsSelected.value as prop}
-							{@const isNumeric =
-								[
-									"x",
-									"y",
-									"w",
-									"h",
-									"fCurrentFontSize",
-									"fCurrentFontStyle",
-									"fOriginX",
-									"fOriginY",
-									"rotation",
-								].indexOf(prop) > -1}
-							{@const isJson = ["points"].indexOf(prop) > -1}
-							{@const propValue = view(
-								[
-									s,
-									prop,
-									prop === "lines"
-										? L.inverse(L.split("\n"))
-										: L.identity,
-									isNumeric
-										? [L.setter((x) => parseFloat(x) || 0)]
-										: L.choose((v) =>
-												typeof v === "object"
-													? [
-															L.rewrite(v => v && v[refKey] ? {...v, [refKeySymbol]: true, ref: v[refKey]} : v),
-															L.define(null),
-															L.rewrite((e) =>
-																e instanceof
-																Error
-																	? null
-																	: e,
-															),
-															L.inverse(L.json()),
-															L.defaults(""),
-														]
-													: L.identity,
-											),
-								],
-								refMap,
-							)}
-							{@const propIsRef = view(
-								[
-									s,
-									prop,
-									L.lens((v) => v?.[refKeySymbol] ? v?.[refKey] : false, (v, o) => {
-										const i = parseInt(v, 10);
-										if (i>=0) {
-											return {[refKeySymbol]: true, ref: i, [refKey]: i}
-										} else {
-											return v ? v : null
-										}
-									}),
-								],
-								refMap,
-							)}
-							<dt>{prop}</dt>
-							<dd>
-								{#if prop === "lines"}
-									<textarea bind:value={propValue.value}
-									></textarea>
-								{:else if propIsRef.value !== false}
-									<select bind:value={propIsRef.value}>
-										{#each currentRefMap as ref, r (r)}
-												<option
-													value={r}
-													>#{r}</option
-												>
-										{/each}
-									</select>
-									<button type="button" onclick={e => {propIsRef.value = null}}>x</button>
-									<small><code>{propValue.value}</code></small>
-
-								{:else}
-									<input
-										type={isNumeric ? "number" : "text"}
-										bind:value={propValue.value}
-									/>
-								{/if}
-							</dd>
-						{/each}
-					</dl>
-					<h4>Attributes</h4>
-					<dl>
-						{#each attrsSelected.value as attr}
-							{@const isColor = attr.indexOf("Color") > -1}
-							{@const attrValue = view(
-								[
-									s,
-									"attributes",
-									"attrs",
-									attr,
-									isColor
-										? [
-												L.props("r", "g", "b"),
-												L.lens(
-													(x) =>
-														`#${R.props(
-															["r", "g", "b"],
-															x,
-														)
-															.map((v) =>
-																(
-																	"0" +
-																	v.toString(
-																		16,
-																	)
-																)
-																	.slice(-2)
-																	.toUpperCase(),
-															)
-															.join("")}`,
-													(hex) =>
-														R.map(
-															(c) =>
-																parseInt(c, 16),
-															hex.match(
-																/#(?<r>[a-f0-9]{2})(?<g>[a-f0-9]{2})(?<b>[a-f0-9]{2})/,
-															).groups,
-														),
-												),
-											]
-										: L.identity,
-								],
-								refMap,
-							)}
-							<dt>{attr}</dt>
-							<dd>
-								<input
-									type={isColor ? "color" : "text"}
-									bind:value={attrValue.value}
-								/>
-								{#if isColor}
-									{@const alphaValue = view(
-										[
-											s,
-											"attributes",
-											"attrs",
-											attr,
-											"a",
-											L.divide(255),
-										],
-										refMap,
-									)}
-									<input
-										type={"number"}
-										min="0"
-										max="1"
-										step="0.05"
-										bind:value={alphaValue.value}
-									/>
-								{/if}
-							</dd>
-						{/each}
-					</dl>
-				</fieldset>
-			{/each}
-		</div>
-	</div>
-
-	{#if doctype.value}
-		<h2>{doctype.value} (version: {version.value})</h2>
-	{/if}
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<Scroller
+	role="application">
+	<div class="fill-full">
+		<Scroller
 		allowOverscroll={false}
 		alignment="center"
 		extraScrollPadding={atom(true)}
@@ -1700,21 +1425,7 @@
 										/>
 									{/if}
 								</g>
-								{#if debug.value}
-									<text
-										pointer-events="none"
-										text-rendering="geometricPrecision"
-										x={rect.x + rect.w / 2}
-										y={rect.y}
-										text-anchor="middle"
-										font-size="7"
-										fill="royalblue"
-										font-family="monospace"
-										title={rect[kindKey]}
-									>
-										{rect[kindKey]}</text
-									>
-								{/if}
+								
 							</g>
 						{/each}
 					</g>
@@ -1757,22 +1468,6 @@
 									/>
 								</g>
 
-								{#if debug.value}
-									<text
-										pointer-events="none"
-										text-rendering="geometricPrecision"
-										x={ellipse.x + ellipse.w / 2}
-										y={ellipse.y}
-										text-anchor="middle"
-										font-size="7"
-										fill="royalblue"
-										font-family="monospace"
-										title={ellipse[kindKey]}
-										>{R.last(
-											ellipse[kindKey].split("."),
-										)}</text
-									>
-								{/if}
 							</g>
 						{/each}
 					</g>
@@ -1858,36 +1553,11 @@
 													decorationKind
 												].attributes()}
 											/>
-										{:else if debug.value}
-											<text
-												pointer-events="none"
-												text-rendering="geometricPrecision"
-												x={diag.displayBox.x}
-												y={diag.displayBox.y}
-												text-anchor="middle"
-												font-size="17"
-												fill="red"
-												font-family="monospace"
-												>{decorationKind}</text
-											>
 										{/if}
 									</g>
 								{/if}
 
-								<text
-									class={{ hidden: !debug.value }}
-									pointer-events="none"
-									text-rendering="geometricPrecision"
-									x={diag.displayBox.x +
-										diag.displayBox.w / 2}
-									y={diag.displayBox.y}
-									text-anchor="middle"
-									font-size="12"
-									fill="royalblue"
-									font-family="monospace"
-									title={diag[kindKey]}
-									>{R.last(diag[kindKey].split("."))}</text
-								>
+								
 							</g>
 						{/each}
 					</g>
@@ -2074,21 +1744,6 @@
 									{/each}
 								</text>
 
-								{#if debug.value}
-									<text
-										pointer-events="none"
-										text-rendering="geometricPrecision"
-										x={textX}
-										y={text.fOriginY}
-										text-anchor="middle"
-										font-size="7"
-										fill="royalblue"
-										font-family="monospace"
-										title={text[kindKey]}
-									>
-										{text[kindKey]} ({lines.length})</text
-									>
-								{/if}
 							</g>
 						{/each}
 					</g>
@@ -2137,23 +1792,473 @@
 								use:bindBoundingBox={measuredSize}
 							/>
 						{/each}
+
+
+{#if debug.value}
+{#each rectangles.value as rect, i (rect[selfKey])}
+
+<text
+pointer-events="none"
+text-rendering="geometricPrecision"
+x={rect.x + rect.w / 2}
+y={rect.y}
+text-anchor="middle"
+font-size="7"
+fill="royalblue"
+font-family="monospace"
+title={rect[kindKey]}
+>
+{rect[kindKey]}</text
+>
+{/each}
+
+{#each ellipses.value as ellipse, i (ellipse[selfKey])}
+
+<text
+	pointer-events="none"
+	text-rendering="geometricPrecision"
+	x={ellipse.x + ellipse.w / 2}
+	y={ellipse.y}
+	text-anchor="middle"
+	font-size="7"
+	fill="royalblue"
+	font-family="monospace"
+	title={ellipse[kindKey]}
+	>{R.last(
+		ellipse[kindKey].split("."),
+	)}</text
+>
+{/each}
+
+{#each diagramFigs.value as diag, i (diag[selfKey])}
+{@const decoration = tryDeref(
+diag,
+currentRefMap,
+["decoration"]
+)}
+
+{#if decoration}
+	{#if !boxDecorations[decorationKind]}
+		
+		<text
+			pointer-events="none"
+			text-rendering="geometricPrecision"
+			x={diag.displayBox.x}
+			y={diag.displayBox.y}
+			text-anchor="middle"
+			font-size="17"
+			fill="red"
+			font-family="monospace"
+			>{decorationKind}</text
+		>
+	{/if}
+{/if}
+
+<text
+class={{ hidden: !debug.value }}
+pointer-events="none"
+text-rendering="geometricPrecision"
+x={diag.displayBox.x +
+	diag.displayBox.w / 2}
+y={diag.displayBox.y}
+text-anchor="middle"
+font-size="12"
+fill="royalblue"
+font-family="monospace"
+title={diag[kindKey]}
+>{R.last(diag[kindKey].split("."))}</text
+>
+{/each}
+
+{#each textes.value as text, i (text[selfKey])}
+							
+							{@const id =
+								/*text.attributes?.attrs.FigureWithID ??*/
+								"ref-" + text[selfKey]}
+							{@const measuredSize = view(
+								[
+									"id" + id,
+									L.props("x", "y", "width", "height"),
+								],
+								sizeCache,
+							)}
+							{@const textAlignment = readAttribute(
+								text,
+								"TextAlignment",
+							)}
+							{@const measureValue = measuredSize.value}
+		
+							{@const textX =
+								1 * text.fOriginX +
+								(measureValue
+									? (measureValue.width * textAlignment) / 2
+									: 0)}
+							{@const lines = text.lines}
+									<text
+										pointer-events="none"
+										text-rendering="geometricPrecision"
+										x={textX}
+										y={text.fOriginY}
+										text-anchor="middle"
+										font-size="7"
+										fill="royalblue"
+										font-family="monospace"
+										title={text[kindKey]}
+									>
+										{text[kindKey]} ({lines.length})</text
+									>
+						{/each}
+
+{/if}
 					{/key}
 				</g>
 			</Navigator>
 		</svg>
 	</Scroller>
+	</div>
+
+	<div
+		class={{ "selection-overlay": true, hidden: selection.value.length == 0 }}>
+	
+		<div
+			style="display: flex; flex-direction: column; background: #333d; gap: 1em; padding: 0.5em; color: #fff"
+		>
+			<button
+				type="button"
+				onclick={(e) => {
+					selection.value = [];
+				}}>Clear Selection</button
+			>
+			{#each selection.value as s}
+				{@const attrsSelected = read(
+					[s, "attributes", "attrs", L.partsOf(L.keys)],
+					refMap,
+				)}
+				{@const propsSelected = read(
+					[
+						s,
+						L.partsOf(
+							L.keys,
+							L.when((x) => x != "attributes" && x[0] !== "_"),
+						),
+					],
+					refMap,
+				)}
+				{@const selectedKind = read([s, kindKey], refMap)}
+				<fieldset>
+					<legend># {s} ({selectedKind.value})</legend>
+
+					<h4>Props</h4>
+					<dl>
+						{#each propsSelected.value as prop}
+							{@const isNumeric =
+								[
+									"x",
+									"y",
+									"w",
+									"h",
+									"fCurrentFontSize",
+									"fCurrentFontStyle",
+									"fOriginX",
+									"fOriginY",
+									"rotation",
+								].indexOf(prop) > -1}
+							{@const isJson = ["points"].indexOf(prop) > -1}
+							{@const propValue = view(
+								[
+									s,
+									prop,
+									prop === "lines"
+										? L.inverse(L.split("\n"))
+										: L.identity,
+									isNumeric
+										? [L.setter((x) => parseFloat(x) || 0)]
+										: L.choose((v) =>
+												typeof v === "object"
+													? [
+															L.rewrite(v => v && v[refKey] ? {...v, [refKeySymbol]: true, ref: v[refKey]} : v),
+															L.define(null),
+															L.rewrite((e) =>
+																e instanceof
+																Error
+																	? null
+																	: e,
+															),
+															L.inverse(L.json()),
+															L.defaults(""),
+														]
+													: L.identity,
+											),
+								],
+								refMap,
+							)}
+							{@const propIsRef = view(
+								[
+									s,
+									prop,
+									L.lens((v) => v?.[refKeySymbol] ? v?.[refKey] : false, (v, o) => {
+										const i = parseInt(v, 10);
+										if (i>=0) {
+											return {[refKeySymbol]: true, ref: i, [refKey]: i}
+										} else {
+											return v ? v : null
+										}
+									}),
+								],
+								refMap,
+							)}
+							<dt>{prop}</dt>
+							<dd>
+								{#if prop === "lines"}
+									<textarea bind:value={propValue.value}
+									></textarea>
+								{:else if propIsRef.value !== false}
+									<select bind:value={propIsRef.value}>
+										{#each currentRefMap as ref, r (r)}
+												<option
+													value={r}
+													>#{r}</option
+												>
+										{/each}
+									</select>
+									<button type="button" onclick={e => {propIsRef.value = null}}>x</button>
+									<small><code>{propValue.value}</code></small>
+
+								{:else}
+									<input
+										type={isNumeric ? "number" : "text"}
+										bind:value={propValue.value}
+									/>
+								{/if}
+							</dd>
+						{/each}
+					</dl>
+					<h4>Attributes</h4>
+					<dl>
+						{#each attrsSelected.value as attr}
+							{@const isColor = attr.indexOf("Color") > -1}
+							{@const attrValue = view(
+								[
+									s,
+									"attributes",
+									"attrs",
+									attr,
+									isColor
+										? [
+												L.props("r", "g", "b"),
+												L.lens(
+													(x) =>
+														`#${R.props(
+															["r", "g", "b"],
+															x,
+														)
+															.map((v) =>
+																(
+																	"0" +
+																	v.toString(
+																		16,
+																	)
+																)
+																	.slice(-2)
+																	.toUpperCase(),
+															)
+															.join("")}`,
+													(hex) =>
+														R.map(
+															(c) =>
+																parseInt(c, 16),
+															hex.match(
+																/#(?<r>[a-f0-9]{2})(?<g>[a-f0-9]{2})(?<b>[a-f0-9]{2})/,
+															).groups,
+														),
+												),
+											]
+										: L.identity,
+								],
+								refMap,
+							)}
+							<dt>{attr}</dt>
+							<dd>
+								<input
+									type={isColor ? "color" : "text"}
+									bind:value={attrValue.value}
+								/>
+								{#if isColor}
+									{@const alphaValue = view(
+										[
+											s,
+											"attributes",
+											"attrs",
+											attr,
+											"a",
+											L.divide(255),
+										],
+										refMap,
+									)}
+									<input
+										type={"number"}
+										min="0"
+										max="1"
+										step="0.05"
+										bind:value={alphaValue.value}
+									/>
+								{/if}
+							</dd>
+						{/each}
+					</dl>
+				</fieldset>
+			{/each}
+		</div>
+	</div>
+
+	<div class="view-options">
+		<label><input type="checkbox" bind:checked={debug.value} /> Debug</label>
+	</div>
+
+	<div class="option-bar">
+		<div style="display: flex; gap: 0.2em; align-items: baseline; flex-wrap: wrap;">
+	{#each examples as example, e (e)}
+		<button
+			type="button"
+			onclick={(e) => {
+				renewSerialized.value = example;
+				refitCamera();
+			}}>File #{e + 1}</button
+		>
+	{/each}
+	{#await moreExamples then { files }}
+		<select
+			onchange={(e) => {
+				if (e.currentTarget.value) {
+					loadExample(e.currentTarget.value).then((x) => {
+						renewSerialized.value = x.content;
+						refitCamera();
+					});
+				}
+			}}
+		>
+			<option value="">More examples</option>
+			{#each files as { name, href }}
+				<option value={href}>{name}</option>
+			{/each}
+		</select>
+	{:catch}
+		<em style="color: #aaa"
+			>Or Drop Renew Files from your own PC into the text field</em
+		>
+	{/await}
 </div>
+
+	<div class="columns" style="height: 15em">
+		<textarea
+			class={
+				{
+					"has-error": renewSerialized.hasError,
+				}
+			}
+			placeholder="// Drop a renew file here"
+			bind:value={renewSerialized.value}
+		></textarea>
+		<textarea bind:value={renewJson.value}></textarea>
+
+		<div
+			style="display: grid; flex-direction: column; align-items: stretch; align-content: stretch;flex-grow: 1; grid-template-rows: auto 1fr;"
+		>
+			<input
+				type="search"
+				placeholder="Search..."
+				bind:value={searchTerm.value}
+				style="flex-grow: 0; height: 2em;"
+			/>
+			<select size="10" bind:value={selection.value} multiple="multiple">
+				{#each currentRefMap as ref, r (r)}
+					{#if !searchTerm.value.length || ref[kindKey].indexOf(searchTerm.value) > -1}
+						<option
+							value={r}
+							disabled={selectableTypes.indexOf(ref[kindKey]) < 0}
+							>#{r} {ref[kindKey]}</option
+						>
+					{/if}
+				{/each}
+			</select>
+		</div>
+	</div>
+
+	<div class="error-message" hidden={!renewSerialized.hasError}>
+		<button type="button" onclick={renewSerialized.reset}>Reset</button>
+		{renewSerialized.error}
+	</div>
+
+	<div class="error-message" hidden={!renewJson.hasError}>
+		<button type="button" onclick={renewJson.reset}>Reset</button>
+		{renewJson.error}
+	</div>
+
+	
+	</div>
+</div>
+
+
+
 
 <style>
 	h2 {
 		word-break: break-word;
 	}
 
+	.columns {
+		display: grid;
+		grid-template-columns: 1fr 1fr 1fr;
+		gap: 1em;
+	}
+
+	.screen {
+		position: absolute; left: 0;right: 0; bottom: 0; top: 0; display: grid;
+		grid-template-rows: 70% 30%;
+		grid-template-columns: 1fr 1fr 1fr;
+	}
+
+	.fill-full {
+		align-self: stretch;
+		justify-self: stretch;
+		grid-area: 1 / 1 / 2 / -1;
+	}
+
+	.selection-overlay {
+		align-self: stretch;
+		justify-self: stretch;
+		grid-area: 1 / 1 / -1 / 2;
+		max-height: 100%;
+		max-width: 100%;
+		overflow: auto;
+		position: fixed; top: 1em; left: 1em;z-index: 10000; 
+		display: flex;
+		flex-direction: column;
+		gap: 1em;
+	}
+
+	.option-bar {
+		align-self: end;
+		justify-self: stretch;
+		grid-area: 2 / 1 / -1 / -1;
+		z-index: 10;
+		padding: 1em;
+		background: #aaa3;
+	}
+
+	.view-options {
+		align-self: start;
+		justify-self: end;
+		grid-area: 1 / 2 / span 1 / -1;
+		z-index: 10;
+		padding: 1em;
+		background: #aaa3;
+	}
+
 	.canvas {
 		contain: strict;
 		-webkit-user-callout: none;
 		width: 100%;
-		resize: both;
 
 		position: absolute;
 		display: block;
@@ -2175,7 +2280,7 @@
 	}
 
 	.drop-target {
-		border: 0.5em solid gray;
+		border: 0.5em solid transparent;
 	}
 
 	.drop-target.dragging {

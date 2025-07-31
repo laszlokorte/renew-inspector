@@ -206,11 +206,9 @@
 <style>
 	.scroller {
 		contain: strict;
-		border: 3px solid #333;
 		min-height: 10em;
-		resize: both;
+		height: 100%;
 		overflow: scroll;
-		height: 40em;
 		position: relative;
 		display: grid;
 		grid-template-columns: 1fr;
