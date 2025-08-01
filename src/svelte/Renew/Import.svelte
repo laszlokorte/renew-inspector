@@ -4,6 +4,7 @@
 	import { untrack, tick } from "svelte";
 	import * as Geo from "../geometry";
 	import Navigator from "../Canvas/camera/Navigator.svelte";
+	import SelectionOverlay from "./SelectionOverlay.svelte";
 
 	import { frameBoxLens } from "../Canvas/camera/lenses";
 
@@ -545,13 +546,13 @@
 	);
 
 	const integerLens = L.lens(
-		(x) => Math.floor(x),
+		(x) => Math.round(x),
 		(newV, oldV) => Math.ceil(newV) + (oldV - Math.floor(oldV)),
 	);
 
 	const scrollPosition = view(
 		[
-			L.pick({ x: ["x", integerLens], y: ["y", integerLens] }),
+			L.pick({ x: ["x"], y: ["y"] }),
 			L.setter((newScroll, old) => ({
 				x:
 					(newScroll.atMinX && old.x < newScroll.x) ||
@@ -672,7 +673,7 @@
 
 	const dragging = atom(0);
 	const debug = atom(false);
-	const searchTerm = atom("");
+	const filterTerm = atom("");
 	const selection = view(["selection", L.defaults([])], renewDocument);
 
 	const currentSelection = $derived(selection.value);
@@ -1919,206 +1920,22 @@ title={diag[kindKey]}
 	</Scroller>
 	</div>
 
-	<div
-		class={{ "selection-overlay": true, hidden: selection.value.length == 0 }}>
-	
-		<div
-			style="display: flex; flex-direction: column; background: #333d; gap: 1em; padding: 0.5em; color: #fff"
-		>
-			<button
-				type="button"
-				onclick={(e) => {
-					selection.value = [];
-				}}>Clear Selection</button
-			>
-			{#each selection.value as s}
-				{@const attrsSelected = read(
-					[s, "attributes", "attrs", L.partsOf(L.keys)],
-					refMap,
-				)}
-				{@const propsSelected = read(
-					[
-						s,
-						L.partsOf(
-							L.keys,
-							L.when((x) => x != "attributes" && x[0] !== "_"),
-						),
-					],
-					refMap,
-				)}
-				{@const selectedKind = read([s, kindKey], refMap)}
-				<fieldset>
-					<legend># {s} ({selectedKind.value})</legend>
-
-					<h4>Props</h4>
-					<dl>
-						{#each propsSelected.value as prop}
-							{@const isNumeric =
-								[
-									"x",
-									"y",
-									"w",
-									"h",
-									"fCurrentFontSize",
-									"fCurrentFontStyle",
-									"fOriginX",
-									"fOriginY",
-									"rotation",
-								].indexOf(prop) > -1}
-							{@const isJson = ["points"].indexOf(prop) > -1}
-							{@const propValue = view(
-								[
-									s,
-									prop,
-									prop === "lines"
-										? L.inverse(L.split("\n"))
-										: L.identity,
-									isNumeric
-										? [L.setter((x) => parseFloat(x) || 0)]
-										: L.choose((v) =>
-												typeof v === "object"
-													? [
-															L.rewrite(v => v && v[refKey] ? {...v, [refKeySymbol]: true, ref: v[refKey]} : v),
-															L.define(null),
-															L.rewrite((e) =>
-																e instanceof
-																Error
-																	? null
-																	: e,
-															),
-															L.inverse(L.json()),
-															L.defaults(""),
-														]
-													: L.identity,
-											),
-								],
-								refMap,
-							)}
-							{@const propIsRef = view(
-								[
-									s,
-									prop,
-									L.lens((v) => v?.[refKeySymbol] ? v?.[refKey] : false, (v, o) => {
-										const i = parseInt(v, 10);
-										if (i>=0) {
-											return {[refKeySymbol]: true, ref: i, [refKey]: i}
-										} else {
-											return v ? v : null
-										}
-									}),
-								],
-								refMap,
-							)}
-							<dt>{prop}</dt>
-							<dd>
-								{#if prop === "lines"}
-									<textarea bind:value={propValue.value}
-									></textarea>
-								{:else if propIsRef.value !== false}
-									<select bind:value={propIsRef.value}>
-										{#each currentRefMap as ref, r (r)}
-												<option
-													value={r}
-													>#{r}</option
-												>
-										{/each}
-									</select>
-									<button type="button" onclick={e => {propIsRef.value = null}}>x</button>
-									<small><code>{propValue.value}</code></small>
-
-								{:else}
-									<input
-										type={isNumeric ? "number" : "text"}
-										bind:value={propValue.value}
-									/>
-								{/if}
-							</dd>
-						{/each}
-					</dl>
-					<h4>Attributes</h4>
-					<dl>
-						{#each attrsSelected.value as attr}
-							{@const isColor = attr.indexOf("Color") > -1}
-							{@const attrValue = view(
-								[
-									s,
-									"attributes",
-									"attrs",
-									attr,
-									isColor
-										? [
-												L.props("r", "g", "b"),
-												L.lens(
-													(x) =>
-														`#${R.props(
-															["r", "g", "b"],
-															x,
-														)
-															.map((v) =>
-																(
-																	"0" +
-																	v.toString(
-																		16,
-																	)
-																)
-																	.slice(-2)
-																	.toUpperCase(),
-															)
-															.join("")}`,
-													(hex) =>
-														R.map(
-															(c) =>
-																parseInt(c, 16),
-															hex.match(
-																/#(?<r>[a-f0-9]{2})(?<g>[a-f0-9]{2})(?<b>[a-f0-9]{2})/,
-															).groups,
-														),
-												),
-											]
-										: L.identity,
-								],
-								refMap,
-							)}
-							<dt>{attr}</dt>
-							<dd>
-								<input
-									type={isColor ? "color" : "text"}
-									bind:value={attrValue.value}
-								/>
-								{#if isColor}
-									{@const alphaValue = view(
-										[
-											s,
-											"attributes",
-											"attrs",
-											attr,
-											"a",
-											L.divide(255),
-										],
-										refMap,
-									)}
-									<input
-										type={"number"}
-										min="0"
-										max="1"
-										step="0.05"
-										bind:value={alphaValue.value}
-									/>
-								{/if}
-							</dd>
-						{/each}
-					</dl>
-				</fieldset>
-			{/each}
-		</div>
-	</div>
+	<SelectionOverlay {selection} {refMap} />
 
 	<div class="view-options">
-		<label><input type="checkbox" bind:checked={debug.value} /> Debug</label>
+		{#if doctype.value}
+		<div class="version-info">
+			{doctype.value}<br>
+			version: {version.value}
+		</div>
+		{/if}
+		<label class="big-check"><input type="checkbox" bind:checked={debug.value} /> Debug</label>
 	</div>
 
-	<div class="option-bar">
-		<div style="display: flex; gap: 0.2em; align-items: baseline; flex-wrap: wrap;">
+	<div class="example-bar">
+	<div style="padding: 0 1em; align-self: center;">
+		Examples: 
+	</div>
 	{#each examples as example, e (e)}
 		<button
 			type="button"
@@ -2145,36 +1962,41 @@ title={diag[kindKey]}
 			{/each}
 		</select>
 	{:catch}
-		<em style="color: #aaa"
-			>Or Drop Renew Files from your own PC into the text field</em
-		>
 	{/await}
-</div>
 
-	<div class="columns" style="height: 15em">
+		<em style="color: #777; padding: 0 1em; align-self: center;"
+			>Or Drop Renew Files from your own PC onto the canvas</em
+		>
+	</div>
+
+	<div class="option-bar">
+		
+
+	<div class="columns">
 		<textarea
 			class={
 				{
 					"has-error": renewSerialized.hasError,
 				}
 			}
-			placeholder="// Drop a renew file here"
+			placeholder="// Drop a renew onto the canvas"
 			bind:value={renewSerialized.value}
 		></textarea>
-		<textarea bind:value={renewJson.value}></textarea>
+		<textarea bind:value={renewJson.value}
+			placeholder={'{"renew": "as json structure"}'}></textarea>
 
 		<div
-			style="display: grid; flex-direction: column; align-items: stretch; align-content: stretch;flex-grow: 1; grid-template-rows: auto 1fr;"
+			style="display: grid; flex-direction: column; align-items: stretch; align-content: stretch;flex-grow: 1; grid-template-rows: auto 1fr; gap: 1ex"
 		>
 			<input
 				type="search"
-				placeholder="Search..."
-				bind:value={searchTerm.value}
+				placeholder="Filter..."
+				bind:value={filterTerm.value}
 				style="flex-grow: 0; height: 2em;"
 			/>
 			<select size="10" bind:value={selection.value} multiple="multiple">
 				{#each currentRefMap as ref, r (r)}
-					{#if !searchTerm.value.length || ref[kindKey].indexOf(searchTerm.value) > -1}
+					{#if !filterTerm.value.length || ref[kindKey].indexOf(filterTerm.value) > -1}
 						<option
 							value={r}
 							disabled={selectableTypes.indexOf(ref[kindKey]) < 0}
@@ -2212,40 +2034,52 @@ title={diag[kindKey]}
 		display: grid;
 		grid-template-columns: 1fr 1fr 1fr;
 		gap: 1em;
+		align-items: stretch;
+		align-self: stretch;
+		box-sizing: border-box;
 	}
 
 	.screen {
 		position: absolute; left: 0;right: 0; bottom: 0; top: 0; display: grid;
-		grid-template-rows: 70% 30%;
-		grid-template-columns: 1fr 1fr 1fr;
+		grid-template-rows: 7fr auto 3fr;
+		grid-template-columns: 1fr 1fr 1fr 1fr;
+		box-sizing: border-box;
+		border: 1ex solid transparent;
 	}
 
 	.fill-full {
 		align-self: stretch;
 		justify-self: stretch;
 		grid-area: 1 / 1 / 2 / -1;
+		box-sizing: border-box;
 	}
 
-	.selection-overlay {
-		align-self: stretch;
+
+	.example-bar {
+		align-self: end;
 		justify-self: stretch;
-		grid-area: 1 / 1 / -1 / 2;
-		max-height: 100%;
-		max-width: 100%;
-		overflow: auto;
-		position: fixed; top: 1em; left: 1em;z-index: 10000; 
+		align-self: stretch;
+		grid-area: 2 / 1 / span 1 / -1;
+		z-index: 10;
+		gap: 0.5ex;
+		background: #aaa3;
+		box-sizing: border-box;
 		display: flex;
-		flex-direction: column;
-		gap: 1em;
+		align-items: stretch;
+		justify-items: start;
+		padding: 1ex 1ex 0;
 	}
 
 	.option-bar {
 		align-self: end;
 		justify-self: stretch;
-		grid-area: 2 / 1 / -1 / -1;
+		align-self: stretch;
+		grid-area: 3 / 1 / -1 / -1;
 		z-index: 10;
-		padding: 1em;
 		background: #aaa3;
+		box-sizing: border-box;
+		display: grid;
+		padding: 1ex;
 	}
 
 	.view-options {
@@ -2253,11 +2087,26 @@ title={diag[kindKey]}
 		justify-self: end;
 		grid-area: 1 / 2 / span 1 / -1;
 		z-index: 10;
-		padding: 1em;
+		gap: 1em;
+		display: flex;
+		align-items: center;
+	}
+
+	.version-info {
+		opacity: 0.7;
+	}
+
+	.big-check {
+		gap: 1ex;
+		align-items: center;
 		background: #aaa3;
+		display: flex;
+		padding: 1em;
+		user-select: none;
 	}
 
 	.canvas {
+		outline: none;
 		contain: strict;
 		-webkit-user-callout: none;
 		width: 100%;
@@ -2291,6 +2140,10 @@ title={diag[kindKey]}
 
 	textarea {
 		outline: none;
+		resize: none;
+		height: 100%;
+		max-height: 100%;
+		box-sizing: border-box;
 	}
 
 	.hidden {
@@ -2340,16 +2193,5 @@ title={diag[kindKey]}
 		transform: scale(1, 1);
 		transform-origin: center center;
 		transform-box: fill-box;
-	}
-
-	dl {
-		display: grid;
-		grid-template-columns: auto auto;
-	}
-
-	dt,
-	dd {
-		margin: 0;
-		padding: 0;
 	}
 </style>
