@@ -1112,6 +1112,12 @@
 			preserveAspectRatio={preserveAspectRatio.value}
 			tabindex="-1"
 			role="button"
+			onkeydown={(evt) => {
+				if(evt.key == "Escape") {
+					evt.preventDefault()
+					selection.value = [];
+				}
+			}}
 			onclick={(evt) => {
 				if (evt.target.id && R.startsWith("ref-", evt.target.id)) {
 					selection.value = evt.target.id.slice(4);
@@ -1772,7 +1778,8 @@
 								extensionCurrentValue.minX}
 							height={extensionCurrentValue.maxY -
 								extensionCurrentValue.minY}
-							fill="#ffeeee"
+							fill="none"
+							class="document-bounds"
 						/>
 					{/if}
 					{#key currentRefMap}
@@ -1961,7 +1968,6 @@ title={diag[kindKey]}
 				<option value={href}>{name}</option>
 			{/each}
 		</select>
-	{:catch}
 	{/await}
 
 		<em style="color: #777; padding: 0 1em; align-self: center;"
@@ -2193,5 +2199,13 @@ title={diag[kindKey]}
 		transform: scale(1, 1);
 		transform-origin: center center;
 		transform-box: fill-box;
+	}
+
+	.document-bounds {
+		fill: #fff;
+		stroke-dasharray: 3 3;
+		stroke: #eee;
+		stroke-width: 1px;
+		vector-effect: non-scaling-stroke;
 	}
 </style>
