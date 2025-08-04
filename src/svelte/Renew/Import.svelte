@@ -700,6 +700,21 @@
 		dragging.value -= 1;
 	};
 
+	const reader = new FileReader();
+	reader.onload = (evt) => {
+		renewSerialized.value = evt.target.result;
+		refitCamera();
+	};
+
+	const onDragDrop = (evt) => {
+		evt.preventDefault();
+		dragging.value = 0;
+
+		if (evt.dataTransfer.files.length === 1) {
+			reader.readAsText(evt.dataTransfer.files[0]);
+		}
+	};
+
 	async function refitCamera() {
 		await tick();
 		await tick();
@@ -726,21 +741,6 @@
 			camera,
 		);
 	}
-
-	const reader = new FileReader();
-	reader.onload = (evt) => {
-		renewSerialized.value = evt.target.result;
-		refitCamera();
-	};
-
-	const onDragDrop = (evt) => {
-		evt.preventDefault();
-		dragging.value = 0;
-
-		if (evt.dataTransfer.files.length === 1) {
-			reader.readAsText(evt.dataTransfer.files[0]);
-		}
-	};
 
 	function renewToRgba(color) {
 		const NONE = { r: 255, g: 199, b: 158, a: 255 }; //WTF?
