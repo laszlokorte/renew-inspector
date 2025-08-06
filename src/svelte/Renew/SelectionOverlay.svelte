@@ -39,7 +39,11 @@
 	const selfKey = "__self";
 	const refKey = "__ref";
 
-	const {selection, refMap} = $props()
+	const numf = new Intl.NumberFormat((new Intl.NumberFormat()).resolvedOptions().locale, {maximumFractionDigits: 2, minimumFractionDigits: 2})
+
+	const {selection, refMap, currentGrammar} = $props()
+
+
 </script>
 <div
 	class={{ "selection-overlay": true, hidden: selection.value.length == 0 }}>
@@ -120,7 +124,7 @@
 							[
 								s,
 								prop,
-								L.lens((v) => v?.[refKeySymbol] ? v?.[refKey] : false, (v, o) => {
+								L.lens((v) => v?.[refKey] ? v?.[refKey] : false, (v, o) => {
 									const i = parseInt(v, 10);
 									if (i>=0) {
 										return {[refKeySymbol]: true, ref: i, [refKey]: i}
@@ -160,14 +164,35 @@
 				<h4>Attributes</h4>
 				<dl>
 					{#each attrsSelected.value as attr}
-						{@const isColor = attr.indexOf("Color") > -1}
+						{@const attrType = view(
+							[
+								s,
+								"attributes",
+								"attrs",
+								attr,
+								(v) => {
+									if(Object.hasOwnProperty.call(v, "r") && Object.hasOwnProperty.call(v, "g") && Object.hasOwnProperty.call(v, "b")) {
+										return "color"
+									}
+									if(v === false || v === true) {
+										return "bool"
+									}
+									if(Object.hasOwnProperty.call(v, refKey)) {
+										return "ref"
+									}
+
+									return null
+								},
+							],
+							refMap,
+						)}
 						{@const attrValue = view(
 							[
 								s,
 								"attributes",
 								"attrs",
 								attr,
-								isColor
+								attrType.value === "color"
 									? [
 											L.props("r", "g", "b"),
 											L.lens(
@@ -203,11 +228,12 @@
 						)}
 						<dt>{attr}</dt>
 						<dd>
+							{#if attrType.value === "color"}
+							<label>Color<br>
 							<input
-								type={isColor ? "color" : "text"}
+								type={"color"}
 								bind:value={attrValue.value}
-							/>
-							{#if isColor}
+							/></label>
 								{@const alphaValue = view(
 									[
 										s,
@@ -215,17 +241,32 @@
 										"attrs",
 										attr,
 										"a",
+										L.defaults(255),
 										L.divide(255),
+										L.lens((n) => numf.format(n), (s) => parseFloat(s))
 									],
 									refMap,
 								)}
-								<input
+								<label>Alpha<input
 									type={"number"}
 									min="0"
 									max="1"
-									step="0.05"
+									step="0.01"
 									bind:value={alphaValue.value}
-								/>
+								/></label>
+							{:else if attrType.value === "bool"}
+							<label><input
+									type="checkbox"
+									bind:checked={attrValue.value}
+								/> Bool</label>
+							{:else if attrType.value === "int"}
+							isInt
+							{:else}
+
+							<input
+								type={"text"}
+								bind:value={attrValue.value}
+							/>
 							{/if}
 						</dd>
 					{/each}
@@ -294,7 +335,7 @@
 		border: 3px solid #000a;
 	}
 
-	input, select {
+	input:not([type=checkbox], [type=radio]), select {
 		align-self: stretch;
 		justify-self: stretch;
 		flex-grow: 1;

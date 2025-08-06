@@ -631,9 +631,11 @@
 	});
 	const viewBox = view(viewBoxLens, camera);
 
-	const version = view(["json", "version"], renewDocument);
+	const version = view(["json", "version", L.defaults(-1)], renewDocument);
 	const doctype = view(["json", "doctype"], renewDocument);
 	const refMap = view([jsonLens, "refMap"], renewDocument);
+
+	const currentGrammar = read((v) => makeGrammar(v), version)
 
 	// const renderedRefMap = view((map) => {
 	// 	return map
@@ -1927,7 +1929,7 @@ title={diag[kindKey]}
 	</Scroller>
 	</div>
 
-	<SelectionOverlay {selection} {refMap} />
+	<SelectionOverlay {selection} {refMap} {currentGrammar} />
 
 	<div class="view-options">
 		{#if doctype.value}
@@ -1970,9 +1972,18 @@ title={diag[kindKey]}
 		</select>
 	{/await}
 
-		<em style="color: #777; padding: 0 1em; align-self: center;"
-			>Or Drop Renew Files from your own PC onto the canvas</em
+		<label style="align-self: center; cursor: pointer;">
+			<em style="color: #777; padding: 0 1em; align-self: center;"
+			>Or Drop Renew Files <u>from your computer</u> onto the canvas</em
 		>
+		<input type="file" style="display: none;" 
+			onchange={(evt) => {
+				console.log(evt.currentTarget.files)
+				if (evt.currentTarget.files.length === 1) {
+					reader.readAsText(evt.currentTarget.files[0]);
+				}
+			}} />
+		</label>
 	</div>
 
 	<div class="option-bar">
